@@ -1,0 +1,13 @@
+{
+  "k": 10,
+  "value_budget": 60,
+  "scan_cap": 20000,
+  "str_trunc": 20,
+  "provenance": {
+    "derived_on": "train-fit",
+    "n_dbs": 58,
+    "n_listable_columns": 2029,
+    "created": "2026-08-01T18:21:47.781650+00:00",
+    "note": "Frozen profiler rules. Derived on a train-only split. Global and fixed: do NOT tune per database -- that is leakage. The per-database VALUES are computed by utils._samples_block at build time, including on dev."
+  }
+}

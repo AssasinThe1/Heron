@@ -1,0 +1,390 @@
+{
+  "created": "2026-07-31T12:37:40.823383+00:00",
+  "seed": 13,
+  "data_root": "/Users/san/My PC/KGP/Data",
+  "n_fit_questions": 7189,
+  "n_val_questions": 1835,
+  "n_val_1k": 887,
+  "fit_dbs": [
+    "address",
+    "app_store",
+    "authors",
+    "beer_factory",
+    "bike_share_1",
+    "book_publishing_company",
+    "books",
+    "car_retails",
+    "cars",
+    "chicago_crime",
+    "citeseer",
+    "codebase_comments",
+    "coinmarketcap",
+    "college_completion",
+    "computer_student",
+    "cookbook",
+    "cs_semester",
+    "disney",
+    "donor",
+    "european_football_1",
+    "food_inspection",
+    "food_inspection_2",
+    "genes",
+    "hockey",
+    "human_resources",
+    "ice_hockey_draft",
+    "image_and_language",
+    "law_episode",
+    "legislator",
+    "mental_health_survey",
+    "menu",
+    "movie",
+    "movie_3",
+    "movielens",
+    "movies_4",
+    "music_platform_2",
+    "music_tracker",
+    "olympics",
+    "professional_basketball",
+    "public_review_platform",
+    "regional_sales",
+    "restaurant",
+    "retail_complains",
+    "retails",
+    "sales",
+    "sales_in_weather",
+    "shakespeare",
+    "shipping",
+    "social_media",
+    "software_company",
+    "student_loan",
+    "superstore",
+    "talkingdata",
+    "trains",
+    "university",
+    "video_games",
+    "world",
+    "world_development_indicators"
+  ],
+  "val_dbs": [
+    "airline",
+    "craftbeer",
+    "language_corpus",
+    "mondial_geo",
+    "movie_platform",
+    "shooting",
+    "simpson_episodes",
+    "soccer_2016",
+    "synthea",
+    "works_cycles"
+  ],
+  "excluded_dbs": [
+    "retail_world"
+  ],
+  "excluded_ids": [
+    2142,
+    2143,
+    2462,
+    2464,
+    2467,
+    2470,
+    2512,
+    2513,
+    2518,
+    2525,
+    2558,
+    2567,
+    6720,
+    6759,
+    6771,
+    6775,
+    6836,
+    7122,
+    7129,
+    7172,
+    7173,
+    7178,
+    7218,
+    7227,
+    7325,
+    7409,
+    7438,
+    8190,
+    8820,
+    8997,
+    9002
+  ],
+  "db_stats": {
+    "address": {
+      "tables": 9,
+      "questions": 150
+    },
+    "airline": {
+      "tables": 3,
+      "questions": 92
+    },
+    "app_store": {
+      "tables": 2,
+      "questions": 57
+    },
+    "authors": {
+      "tables": 5,
+      "questions": 174
+    },
+    "beer_factory": {
+      "tables": 7,
+      "questions": 131
+    },
+    "bike_share_1": {
+      "tables": 4,
+      "questions": 111
+    },
+    "book_publishing_company": {
+      "tables": 11,
+      "questions": 73
+    },
+    "books": {
+      "tables": 16,
+      "questions": 198
+    },
+    "car_retails": {
+      "tables": 8,
+      "questions": 126
+    },
+    "cars": {
+      "tables": 4,
+      "questions": 84
+    },
+    "chicago_crime": {
+      "tables": 7,
+      "questions": 188
+    },
+    "citeseer": {
+      "tables": 3,
+      "questions": 19
+    },
+    "codebase_comments": {
+      "tables": 5,
+      "questions": 124
+    },
+    "coinmarketcap": {
+      "tables": 2,
+      "questions": 48
+    },
+    "college_completion": {
+      "tables": 4,
+      "questions": 76
+    },
+    "computer_student": {
+      "tables": 4,
+      "questions": 72
+    },
+    "cookbook": {
+      "tables": 4,
+      "questions": 69
+    },
+    "craftbeer": {
+      "tables": 2,
+      "questions": 6
+    },
+    "cs_semester": {
+      "tables": 5,
+      "questions": 113
+    },
+    "disney": {
+      "tables": 5,
+      "questions": 115
+    },
+    "donor": {
+      "tables": 5,
+      "questions": 160
+    },
+    "european_football_1": {
+      "tables": 2,
+      "questions": 57
+    },
+    "food_inspection": {
+      "tables": 3,
+      "questions": 82
+    },
+    "food_inspection_2": {
+      "tables": 5,
+      "questions": 139
+    },
+    "genes": {
+      "tables": 3,
+      "questions": 23
+    },
+    "hockey": {
+      "tables": 22,
+      "questions": 207
+    },
+    "human_resources": {
+      "tables": 3,
+      "questions": 59
+    },
+    "ice_hockey_draft": {
+      "tables": 4,
+      "questions": 84
+    },
+    "image_and_language": {
+      "tables": 6,
+      "questions": 139
+    },
+    "language_corpus": {
+      "tables": 7,
+      "questions": 136
+    },
+    "law_episode": {
+      "tables": 6,
+      "questions": 114
+    },
+    "legislator": {
+      "tables": 5,
+      "questions": 177
+    },
+    "mental_health_survey": {
+      "tables": 3,
+      "questions": 50
+    },
+    "menu": {
+      "tables": 4,
+      "questions": 108
+    },
+    "mondial_geo": {
+      "tables": 34,
+      "questions": 293
+    },
+    "movie": {
+      "tables": 3,
+      "questions": 46
+    },
+    "movie_3": {
+      "tables": 17,
+      "questions": 325
+    },
+    "movie_platform": {
+      "tables": 5,
+      "questions": 167
+    },
+    "movielens": {
+      "tables": 7,
+      "questions": 98
+    },
+    "movies_4": {
+      "tables": 17,
+      "questions": 158
+    },
+    "music_platform_2": {
+      "tables": 4,
+      "questions": 69
+    },
+    "music_tracker": {
+      "tables": 2,
+      "questions": 45
+    },
+    "olympics": {
+      "tables": 11,
+      "questions": 169
+    },
+    "professional_basketball": {
+      "tables": 10,
+      "questions": 157
+    },
+    "public_review_platform": {
+      "tables": 15,
+      "questions": 381
+    },
+    "regional_sales": {
+      "tables": 6,
+      "questions": 164
+    },
+    "restaurant": {
+      "tables": 3,
+      "questions": 117
+    },
+    "retail_complains": {
+      "tables": 6,
+      "questions": 168
+    },
+    "retails": {
+      "tables": 8,
+      "questions": 240
+    },
+    "sales": {
+      "tables": 4,
+      "questions": 107
+    },
+    "sales_in_weather": {
+      "tables": 3,
+      "questions": 79
+    },
+    "shakespeare": {
+      "tables": 5,
+      "questions": 110
+    },
+    "shipping": {
+      "tables": 5,
+      "questions": 106
+    },
+    "shooting": {
+      "tables": 3,
+      "questions": 24
+    },
+    "simpson_episodes": {
+      "tables": 7,
+      "questions": 210
+    },
+    "soccer_2016": {
+      "tables": 21,
+      "questions": 258
+    },
+    "social_media": {
+      "tables": 3,
+      "questions": 78
+    },
+    "software_company": {
+      "tables": 5,
+      "questions": 75
+    },
+    "student_loan": {
+      "tables": 10,
+      "questions": 203
+    },
+    "superstore": {
+      "tables": 6,
+      "questions": 116
+    },
+    "synthea": {
+      "tables": 11,
+      "questions": 185
+    },
+    "talkingdata": {
+      "tables": 12,
+      "questions": 206
+    },
+    "trains": {
+      "tables": 2,
+      "questions": 40
+    },
+    "university": {
+      "tables": 6,
+      "questions": 150
+    },
+    "video_games": {
+      "tables": 8,
+      "questions": 201
+    },
+    "works_cycles": {
+      "tables": 66,
+      "questions": 464
+    },
+    "world": {
+      "tables": 4,
+      "questions": 99
+    },
+    "world_development_indicators": {
+      "tables": 6,
+      "questions": 155
+    }
+  }
+}

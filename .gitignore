@@ -1,0 +1,51 @@
+# ---------------------------------------------------------------------------
+# Generated artifacts. See README "Data & artifacts".
+# KEPT in git on purpose: splits/*.json, profile_rules.json (tiny provenance
+# that defines the exact train/val boundary and frozen profiler rules).
+# ---------------------------------------------------------------------------
+
+# All root-level generated JSON — prompts, payloads, results, candidates, audits,
+# bench, preds, *.stats.json, etc. splits/*.json lives in a subdir so it is NOT
+# matched (kept); profile_rules.json is explicitly un-ignored below.
+/*.json
+!profile_rules.json
+
+# CSVs and training sets — all generated.
+*.csv
+*.jsonl
+
+# Trained model — LoRA adapter, merged weights, checkpoints (keep on Drive, never in git)
+qwen7b-t2s*/
+*-merged/
+adapter/
+*adapter*/
+checkpoint-*/
+adapter_config.json
+adapter_model.*
+*.safetensors
+*.bin
+*.gguf
+*.pt
+*.pth
+*.ckpt
+
+# Archives — all kinds
+*.zip
+*.tar
+*.tar.*
+*.tgz
+*.gz
+*.bz2
+*.xz
+*.7z
+*.rar
+
+# Python / OS
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.DS_Store
+
+# Secrets — never commit
+.env
+*.key
