@@ -2,7 +2,7 @@
 
 Consolidated record of results and decisions. Numbers are from the artifacts in
 this folder (the `errors_*.csv`, `splits/manifest.json`, `profile_rules.json`,
-and the audit). `Notes.md` is the daily journal; this is the reference sheet.
+and the audit). This is the project's reference sheet — every number with its source.
 
 Last updated: 2026-08-02.
 
@@ -28,7 +28,7 @@ All eval is **greedy** (temp 0, n=1). Data generation will be n=8, temp 0.8.
 | train, winnable only, 32B | 799 | 0.6233 | excludes broken gold |
 | **train, excl. `retail_world`, 32B** | 774 | **0.6111** | the real baseline |
 | train-val-1k, clean, 32B (ddl) | 887 | **0.6674** | teacher working baseline |
-| **dev — 32B teacher** (ddl) | 1534 | **0.6271** | exact; supersedes earlier ~0.6336 estimate |
+| **dev — 32B teacher** (ddl) | 1534 | **0.6271** | exact `ddl` greedy under the frozen prompt builder |
 | **dev — 7B base** | 1534 | 0.5372 | untuned |
 | **dev — 7B tuned (QLoRA, ddl)** | 1534 | **0.5639** | +41 q vs base, McNemar χ²=8.8 **SIG** |
 
