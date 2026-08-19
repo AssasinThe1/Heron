@@ -12,6 +12,7 @@
 &nbsp;![Inference](https://img.shields.io/badge/inference-single--call-2EA043)
 &nbsp;![Cost](https://img.shields.io/badge/%240.0053%20%2F%201k%20queries-2EA043)
 &nbsp;![License](https://img.shields.io/badge/license-MIT-A31F34)
+&nbsp;[![HuggingFace](https://img.shields.io/badge/🤗%20Hugging%20Face-model-FFD21E)](https://huggingface.co/AssassinThe1/qwen7b-t2s-ddl-merged)
 
 </div>
 
@@ -62,6 +63,47 @@ unguarded) so it can't be folded into the headline — it recovers +2 questions 
 the tuned 7B and +0 on the base, a real but marginal effect, not the story.
 
 Full numbers and provenance: [stats.md](stats.md).
+
+## Use the model
+
+On the Hugging Face Hub in two forms:
+
+- **Merged model** — [`AssassinThe1/qwen7b-t2s-ddl-merged`](https://huggingface.co/AssassinThe1/qwen7b-t2s-ddl-merged), full fp16 weights, for serving:
+  ```bash
+  vllm serve AssassinThe1/qwen7b-t2s-ddl-merged        # OpenAI-compatible endpoint
+  ```
+  ```python
+  from transformers import AutoModelForCausalLM, AutoTokenizer
+  m   = AutoModelForCausalLM.from_pretrained("AssassinThe1/qwen7b-t2s-ddl-merged", torch_dtype="auto", device_map="auto")
+  tok = AutoTokenizer.from_pretrained("AssassinThe1/qwen7b-t2s-ddl-merged")
+  ```
+- **LoRA adapter** — [`AssassinThe1/qwen7b-t2s-ddl`](https://huggingface.co/AssassinThe1/qwen7b-t2s-ddl), ~150MB, applied on the base with PEFT:
+  ```python
+  from transformers import AutoModelForCausalLM
+  from peft import PeftModel
+  base  = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-Coder-7B-Instruct", torch_dtype="auto")
+  model = PeftModel.from_pretrained(base, "AssassinThe1/qwen7b-t2s-ddl")
+  ```
+
+Prompt with the exact training format — system rules + schema DDL + question — from
+`utils.py` (`SYSTEM`, `user_block`) / `build_prompts.py`. The model is frozen to the
+`ddl` schema variant; feeding it a different format silently costs accuracy.
+
+## Deployment
+
+Served on **Modal** (serverless, **scale-to-zero**) — one L4 GPU, OpenAI-compatible
+vLLM endpoint, weights cached on a persistent Volume (`deploy_modal.py`; open-loop
+load client `loadtest.py`):
+
+- **cold start ~77 s** (scale-from-zero, cached weights, `--enforce-eager` — which
+  cut it from ~150 s by skipping torch.compile + CUDA-graph capture)
+- **~5 req/s** sustained on one L4, p95 ~8 s; saturates at its **~24-concurrent
+  KV-cache ceiling** (14.25 GiB fp16 weights leave only 5.21 GiB for KV)
+- **$0 idle** (scale-to-zero)
+
+Every limit ties to a measured cause. Full serving-economics breakdown — cold-start
+decomposition, the load curve, and the eager↔compile / fp16↔quant tradeoffs — in
+[stats.md](stats.md#deployment-modal-serverless--the-live-serving-numbers).
 
 ## Key findings
 

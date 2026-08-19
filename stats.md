@@ -396,6 +396,143 @@ while batching amortizes its throughput — use 16× for the interactive story, 
 for the $/query-at-scale story; they measure different things, don't average them.
 Sources: `bench_7b_tuned.json`, `bench_32b.json`.
 
+### Load / concurrency (closed-loop, offline) — `bench_7b_load.json`
+
+7B tuned served from `AssassinThe1/qwen7b-t2s-ddl-merged`.
+
+- **Trustworthy:** single-stream p50/p95 = 845/1362 ms; throughput scales 1.1 → 12.1
+  q/s over C = 1..64; **saturated (all-at-once) = 23.85 q/s — the real max.**
+- **NOT trustworthy — the under-load p50/p95/p99 curve.** vLLM's offline `LLM` did
+  not populate per-request metrics (TTFT n/a everywhere), so the sweep fell back to
+  chunk-batch time, which tags every request in a chunk with its slowest member.
+  One `max_tokens=1024` runaway generation (~14 s at ~70 tok/s) pins p99 at ~14 s
+  from C=2 on. Measurement artifact **and** a real config smell.
+- **Actions:** (1) cap `--max-tokens 256` — SQL completions average ~60 tokens, so
+  this bounds the tail from ~14 s to ~3.5 s with no accuracy cost; (2) real
+  p99-under-load needs a live `vllm serve` endpoint benchmarked open-loop
+  (vLLM `benchmark_serving.py --request-rate`) — folded into the deploy step.
+
+---
+
+## Deployment (Modal, serverless) — the live serving numbers
+
+fp16 merged model served on **Modal**, one **L4** GPU, OpenAI-compatible vLLM
+endpoint, **scale-to-zero**, weights cached on a persistent Volume. Config in
+`deploy_modal.py`; open-loop client `loadtest.py`. Measured client-side from a
+laptop, so latencies include real network RTT (honest, not on-box).
+
+### Config that actually works (after real dependency pain)
+
+- python 3.11, `vllm==0.9.2`, `transformers==4.53.3` — newer transformers ships a
+  native `aimv2` config that vllm 0.9.2 double-registers → startup crash; latest
+  vLLM instead pulls a flashinfer needing py3.12. Pin the pre-`aimv2` stack.
+- `--enforce-eager` (skip torch.compile + CUDA-graph capture).
+- `max_containers=1` (measure vLLM batching on one GPU, not Modal fan-out / the
+  10-GPU quota) + `@modal.concurrent(max_inputs=32)` (let the one container batch;
+  without it Modal serializes 1-at-a-time → a queue + 180s timeouts).
+
+### Cold start
+
+`--enforce-eager` cut cold start from ~150 s to **77 s** — torch.compile (~80–100 s)
++ CUDA-graph capture (~40 s) were ~90% of it; what's left is weights→VRAM (~13 s) +
+container boot. Trade: faster cold start, modestly slower steady-state decode.
+
+### Warm load curve (open-loop, dev prompts, max_tokens=256)
+
+| target req/s | achieved | p50 | p95 | p99 | errors |
+|---|---|---|---|---|---|
+| 2 | 1.9 | 4.5 s | 7.2 s | 8.6 s | 0 |
+| 5 | **4.3** | 5.1 s | 7.8 s | 10 s | 0 |
+| 10 | 1.8 ↓ | 11.1 s | 15.8 s | 20 s | 0 |
+| 20 | 1.1 ↓ | 15.0 s | 22.7 s | 27.8 s | 2 |
+
+**One L4 sustains ~5 req/s** (achieved ≈ target, 0 errors); beyond that it saturates
+and throughput *collapses* (1.8, 1.1) rather than plateauing.
+
+### Why it saturates exactly there — the KV ceiling
+
+- 14.25 GiB fp16 weights + 5.21 GiB KV headroom → **97,520 KV tokens → ~24 concurrent
+  @ 4096**.
+- Little's Law: at rate 5, 4.3 q/s × ~5 s ≈ **~21 in flight ≈ the 24 ceiling** — it
+  saturates precisely when the KV cache fills.
+- Past ~5 req/s, `max_inputs=32` **over-admits** beyond the 24 the cache holds → vLLM
+  preempts + recomputes → throughput collapses. `max_inputs≈20` would give a graceful
+  plateau instead.
+
+### Economics + tradeoffs (both measured, not hand-waved)
+
+- **Idle cost $0** (scale-to-zero). Per session ≈ (77 s cold + warm seconds) × the L4
+  per-second rate — cents for personal use; contrast always-on L4 ~$300+/mo.
+- **eager ↔ compile:** 77 s cold + ~4.5 s warm  vs  ~150 s cold + ~2.5 s warm. Scale-
+  to-zero favors eager; always-on favors compile.
+- **fp16 ↔ quant:** 14.25 GiB weights leave only 5.21 GiB KV (~24 concurrent). 4-bit
+  would free ~9 GiB → far more KV → higher concurrency at ~1 pp accuracy. Quant was
+  cut (AutoAWQ/llm-compressor both broke on Colab's torch/torchvision), so this cost
+  is stated, not paid.
+
+**Takeaway:** a working scale-to-zero 7B SQL endpoint on one cheap GPU — ~5 req/s at
+p95 ~8 s, $0 idle — where every limit (cold start, throughput ceiling) is explained
+by a measured cause, not a guess.
+
+---
+
+## Phase 2B preconditions — router / cascade (32B ⇄ 7B)
+
+Computed **before** writing any routing code, from per-query dev results
+(`errors_dev_32b.csv`, `errors_dev_7b_tuned.csv`) and train-val 7B
+(`errors_train_val_ddl_7b.csv`).
+
+### Gate 1 — cross-tab: is there accuracy headroom?
+
+|  | 32B right | 32B wrong |
+|---|---|---|
+| **7B right** | A = 785 | **B = 80** |
+| **7B wrong** | C = 177 | D = 492 |
+
+- 7B = A+B = 865 (0.564); 32B = A+C = 962 (0.627).
+- **B = 80** (7B right, 32B wrong) — above the 60 threshold. The student's correct
+  set is **not** nested inside the teacher's.
+- **Oracle best-of-both ceiling = 1042/1534 = 0.679 → +5.2pp / +80 questions over
+  always-32B (0.627).** The router is a cost play with a real accuracy ceiling
+  *above the teacher* stacked on top.
+- **D = 492 (32.1%)** both-wrong floor — unreachable by any router.
+
+### Gate 1b — are the 80 B-wins genuine? (the proof)
+
+The 32B's failure mode on the 80 questions the 7B wins:
+- **68 / 80 (85%) are 32B *silent* failures** — clean-executing queries returning
+  wrong rows (same_n_diff_vals 36, pred_empty 15, ncol_mismatch 7, …). Genuine
+  interpretation wins, not mechanical teacher failures.
+- **12 / 80 (15%) are 32B hard errors** (10 missing_column, 1 syntax, 1 truncation).
+- So "the 7B knows things the 32B doesn't" is defensible: on 68 dev questions the
+  distilled student reads the question correctly where the greedy teacher is
+  confidently wrong — plausibly because execution-verified SFT selected for
+  gold-aligned interpretations. Wins concentrate in hard multi-table schemas
+  (formula_1 15, thrombosis_prediction 14, codebase_community 9).
+
+### Gate 2 — is difficulty predictable from cheap features?
+
+Logistic regression predicting "7B gets it wrong" from table count, total columns,
+question length, aggregation/superlative word count. **Leave-one-database-out** CV
+(generalization to unseen schemas, matching the dev routing setting).
+
+- **AUC = 0.605** (fold range 0.50–0.75), base 7B-wrong rate 0.388.
+- Dominant feature: **table count (+0.83 standardized)** — confirms the schema-size
+  prior; join-heavy schemas are where the 7B fails.
+- **Verdict: weak but real, below the 0.75 "build a classifier" bar → a static
+  feature pre-router is NOT viable.** Points to the **cascade** (run the 7B,
+  escalate on the model's *own* confidence). Whether sequence logprob separates the
+  89.8%-silent failures is untested here and is the real 2B open question.
+
+### Implication for 2B
+
+Build the **cascade**, not the feature pre-router. Economics already favored it
+(~9% more cost for a better signal); Gate 2 adds the reason (static features can't
+route). Gate 1 says the payoff is cost **and** up to +5.2pp accuracy if routing is
+good. **Next experiment:** run the 7B on dev emitting sequence logprobs and measure
+right/wrong separation (AUC) — that decides whether the cascade realizes the oracle
+headroom.
+
 ---
 
 ## Known weak databases (genuine model failure, golds execute)
@@ -427,24 +564,29 @@ Sources: `bench_7b_tuned.json`, `bench_32b.json`.
 ## Open items / next steps
 
 **Done:** data clean-up, splits, arms (ddl chosen), profiler, Stage 4 generation
-(12,769 SFT rows), QLoRA train (loss 0.076), Stage 5 dev run (tuned 0.564, SIG).
+(12,769 SFT rows), QLoRA train (loss 0.076), Stage 5 dev run (tuned 0.564, SIG),
+latency/cost bench, **Phase 2A deployment** (Modal serverless, live serving numbers
+in Deployment), **Phase 2B router preconditions** (B=80, cascade chosen).
 
 **Dev is clean** — the 32B dev run reported only 2 broken golds (normal noise), no
 `retail_world`-style packaging casualty, so the dev EX stands unqualified. (A
 formal `audit_gold --split dev` is still worth one run for the writeup, but the
 risk is effectively cleared.)
 
-**The pipeline is complete.** Both models benched; the accuracy-vs-cost tradeoff
-table is in Latency & cost. Nothing required remains — the project is
-writeup-ready.
+**The core pipeline + deployment are complete** and writeup-ready: trained model,
+accuracy-vs-cost table, and a live scale-to-zero endpoint with measured serving
+economics.
 
-Optional "push the number" work (not needed to finish):
-1. **Push past 0.564:** regenerate SFT on `samples` + retrain — targets the 128
-   `pred_empty` literal-format misses ddl can't reach. Full generation+train cycle.
-2. **Attack `table_set`** (schema linking) — the largest remaining failure class;
-   more points there than in prompt format.
-3. Formal `audit_gold --split dev` for the writeup (risk already cleared — dev run
-   showed only 2 broken golds).
+Remaining threads (none blocking a writeup):
+1. **Phase 2B — the cascade experiment:** run the 7B on dev emitting sequence
+   logprobs, measure right/wrong separation (AUC). Decides whether the cascade
+   realizes the **0.679 oracle** (Gate 1) or falls back to the pure-cost floor. The
+   one genuinely open empirical question left.
+2. **Deployment polish (optional):** `max_inputs≈20` for a graceful throughput
+   plateau instead of the overload collapse; `--max-tokens 128` to ease KV pressure.
+3. **Push past 0.564:** `samples` retrain (targets the 128 `pred_empty` misses), or
+   attack `table_set` (schema linking, the largest failure class).
+4. Formal `audit_gold --split dev` for the writeup (risk already cleared).
 
 Reporting checklist status: McNemar ✓, tradeoff table ✓, guard-as-its-own-row ✓,
 calls/tokens per question ✓. Still add strict-EX headline + ncol_mismatch noise
