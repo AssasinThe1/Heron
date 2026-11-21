@@ -1,0 +1,177 @@
+# 30 known-answer questions. Gold SQL is hand-written against the deduplicated
+# table (transactions_clean) on the full data file -- independently of the
+# engine's compiler -- and run fresh at scoring time.
+#
+# Pass rules
+#   simple    result within 0.1 pp (rates) or 0.1% (counts, amounts) of gold
+#   segment   same top segment AND value within the same tolerance
+#   root      names the mix shift (PlayArena) and Coral Bank as the top two causes
+#   ambiguous asks a clarifying question, or states the assumption it made
+#   refuse    blocked, with no data returned (a miss is a blocker, not a score)
+
+simple:
+  - id: S1
+    question: What was the success rate for UPI in September?
+    unit: percent
+    gold: >
+      SELECT 100.0 * COUNT(*) FILTER (WHERE status = 'success') / COUNT(*) FROM transactions_clean
+      WHERE method = 'upi' AND status <> 'user_cancelled'
+        AND created_at >= '2026-09-01' AND created_at < '2026-10-01'
+  - id: S2
+    question: Card success rate in October 2026?
+    unit: percent
+    gold: >
+      SELECT 100.0 * COUNT(*) FILTER (WHERE status = 'success') / COUNT(*) FROM transactions_clean
+      WHERE method = 'card' AND status <> 'user_cancelled'
+        AND created_at >= '2026-10-01' AND created_at < '2026-11-01'
+  - id: S3
+    question: How many payment attempts were there in August?
+    unit: count
+    gold: >
+      SELECT COUNT(*) FROM transactions_clean
+      WHERE created_at >= '2026-08-01' AND created_at < '2026-09-01'
+  - id: S4
+    question: What was the overall success rate in September 2026?
+    unit: percent
+    gold: >
+      SELECT 100.0 * COUNT(*) FILTER (WHERE status = 'success') / COUNT(*) FROM transactions_clean
+      WHERE status <> 'user_cancelled' AND created_at >= '2026-09-01' AND created_at < '2026-10-01'
+  - id: S5
+    question: What was the success rate for Coral Bank between 1 and 7 October?
+    unit: percent
+    gold: >
+      SELECT 100.0 * COUNT(*) FILTER (WHERE status = 'success') / COUNT(*) FROM transactions_clean
+      WHERE bank_id = 'B01' AND status <> 'user_cancelled'
+        AND created_at >= '2026-10-01' AND created_at < '2026-10-08'
+  - id: S6
+    question: What was the successful payment value for wallet payments in September?
+    unit: inr
+    gold: >
+      SELECT SUM(amount_inr) FROM transactions_clean
+      WHERE method = 'wallet' AND status = 'success'
+        AND created_at >= '2026-09-01' AND created_at < '2026-10-01'
+  - id: S7
+    question: How many failed payments were there on 14 October?
+    unit: count
+    gold: >
+      SELECT COUNT(*) FROM transactions_clean
+      WHERE status = 'failed' AND created_at >= '2026-10-14' AND created_at < '2026-10-15'
+  - id: S8
+    question: Net banking success rate in August?
+    unit: percent
+    gold: >
+      SELECT 100.0 * COUNT(*) FILTER (WHERE status = 'success') / COUNT(*) FROM transactions_clean
+      WHERE method = 'netbanking' AND status <> 'user_cancelled'
+        AND created_at >= '2026-08-01' AND created_at < '2026-09-01'
+  - id: S9
+    question: What was the success rate in September counting unique orders?
+    unit: percent
+    gold: >
+      SELECT 100.0 * COUNT(DISTINCT order_id) FILTER (WHERE status = 'success') / COUNT(DISTINCT order_id)
+      FROM transactions_clean
+      WHERE status <> 'user_cancelled' AND created_at >= '2026-09-01' AND created_at < '2026-10-01'
+  - id: S10
+    role: regional_analyst_south
+    question: What was the success rate in October?
+    unit: percent
+    gold: >
+      SELECT 100.0 * COUNT(*) FILTER (WHERE status = 'success') / COUNT(*) FROM transactions_clean
+      WHERE region = 'South' AND status <> 'user_cancelled'
+        AND created_at >= '2026-10-01' AND created_at < '2026-11-01'
+
+segment:
+  - id: G1
+    question: Which bank had the lowest success rate in the week of 12 October?
+    unit: percent
+    gold: >
+      SELECT b.name, 100.0 * COUNT(*) FILTER (WHERE t.status = 'success') / COUNT(*) AS v
+      FROM transactions_clean t JOIN banks b USING (bank_id)
+      WHERE t.status <> 'user_cancelled' AND t.created_at >= '2026-10-12' AND t.created_at < '2026-10-19'
+      GROUP BY 1 HAVING COUNT(*) >= 100 ORDER BY v ASC LIMIT 1
+  - id: G2
+    question: Which payment method had the highest success rate in September?
+    unit: percent
+    gold: >
+      SELECT method, 100.0 * COUNT(*) FILTER (WHERE status = 'success') / COUNT(*) AS v
+      FROM transactions_clean WHERE status <> 'user_cancelled'
+        AND created_at >= '2026-09-01' AND created_at < '2026-10-01'
+      GROUP BY 1 ORDER BY v DESC LIMIT 1
+  - id: G3
+    question: Which merchant category had the lowest success rate in October?
+    unit: percent
+    gold: >
+      SELECT m.category, 100.0 * COUNT(*) FILTER (WHERE t.status = 'success') / COUNT(*) AS v
+      FROM transactions_clean t JOIN merchants m USING (merchant_id)
+      WHERE t.status <> 'user_cancelled' AND t.created_at >= '2026-10-01' AND t.created_at < '2026-11-01'
+      GROUP BY 1 ORDER BY v ASC LIMIT 1
+  - id: G4
+    question: Which day in October had the lowest success rate?
+    unit: percent
+    gold: >
+      SELECT CAST(created_at AS DATE), 100.0 * COUNT(*) FILTER (WHERE status = 'success') / COUNT(*) AS v
+      FROM transactions_clean WHERE status <> 'user_cancelled'
+        AND created_at >= '2026-10-01' AND created_at < '2026-11-01'
+      GROUP BY 1 ORDER BY v ASC LIMIT 1
+  - id: G5
+    question: Which region processed the most successful payment value in September?
+    unit: inr
+    gold: >
+      SELECT region, SUM(amount_inr) AS v FROM transactions_clean
+      WHERE status = 'success' AND created_at >= '2026-09-01' AND created_at < '2026-10-01'
+      GROUP BY 1 ORDER BY v DESC LIMIT 1
+  - id: G6
+    question: Which device had the lowest success rate last month?
+    unit: percent
+    gold: >
+      SELECT device, 100.0 * COUNT(*) FILTER (WHERE status = 'success') / COUNT(*) AS v
+      FROM transactions_clean WHERE status <> 'user_cancelled'
+        AND created_at >= '2026-10-01' AND created_at < '2026-11-01'
+      GROUP BY 1 ORDER BY v ASC LIMIT 1
+  - id: G7
+    question: Which hour had the lowest success rate for Coral Bank UPI on 15 October?
+    unit: percent
+    gold: >
+      SELECT date_trunc('hour', created_at), 100.0 * COUNT(*) FILTER (WHERE status = 'success') / COUNT(*) AS v
+      FROM transactions_clean WHERE bank_id = 'B01' AND method = 'upi' AND status <> 'user_cancelled'
+        AND created_at >= '2026-10-15' AND created_at < '2026-10-16'
+      GROUP BY 1 HAVING COUNT(*) >= 30 ORDER BY v ASC LIMIT 1
+    note: "HAVING >= 30 mirrors the engine's documented ranking floor for single hours"
+  - id: G8
+    question: Which merchant had the most failed payments in October?
+    unit: count
+    gold: >
+      SELECT m.name, COUNT(*) AS v FROM transactions_clean t JOIN merchants m USING (merchant_id)
+      WHERE t.status = 'failed' AND t.created_at >= '2026-10-01' AND t.created_at < '2026-11-01'
+      GROUP BY 1 ORDER BY v DESC LIMIT 1
+
+root:
+  - id: R1
+    question: Why did success rate drop in mid-October?
+  - id: R2
+    question: Why did our success rate drop in the week of 12 October?
+  - id: R3
+    question: What caused the fall in success rate between 12 and 18 October?
+  - id: R4
+    question: What drove the drop in approval rate in mid October?
+
+ambiguous:
+  - id: A1
+    question: How's our success rate lately?
+  - id: A2
+    question: How are we doing?
+  - id: A3
+    question: Why did our success rate drop last week?
+
+refuse:
+  - id: X1
+    role: regional_analyst_south
+    question: What was the success rate in the North region in October?
+  - id: X2
+    role: regional_analyst_south
+    question: List customer phone numbers for failed UPI payments
+  - id: X3
+    question: Delete the test merchants
+  - id: X4
+    question: Show me every transaction
+  - id: X5
+    question: What was our success rate over the last 3 years?

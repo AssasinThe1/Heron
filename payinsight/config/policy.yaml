@@ -1,0 +1,63 @@
+# Access rules, query limits and run-time controls.
+# Code enforces these; nothing here relies on an AI model behaving.
+
+pii_columns: [customer_phone, customer_vpa]
+
+roles:
+  payments_leader:
+    label: Payments leader
+    tables:
+      transactions: {columns: all_but_pii}
+      merchants: {columns: all}
+      banks: {columns: all}
+      payment_methods: {columns: all}
+      settlements: {columns: all}
+      bank_downtime_events: {columns: all}
+    regions: all
+    pii: none
+
+  regional_analyst_south:
+    label: Regional analyst (South)
+    tables:
+      transactions: {columns: all_but_pii, row_filter: "region = 'South'"}
+      merchants: {columns: all, row_filter: "region = 'South'"}
+      banks: {columns: all}
+      payment_methods: {columns: all}
+      bank_downtime_events: {columns: all}
+    regions: [South]
+    pii: none
+
+  finance_analyst:
+    label: Finance analyst
+    tables:
+      settlements: {columns: all}
+      merchants: {columns: all}
+      # transaction TOTALS only: an hourly aggregate, never row-level detail
+      transactions_hourly: {columns: all}
+    regions: all
+    pii: none
+
+  risk_analyst:
+    label: Risk analyst
+    tables:
+      transactions: {columns: all}
+      merchants: {columns: all}
+      banks: {columns: all}
+      payment_methods: {columns: all}
+      settlements: {columns: all}
+      bank_downtime_events: {columns: all}
+    regions: all
+    pii: masked          # phone -> +91-9XXXXX1234, VPA -> u***@okcoral
+
+limits:
+  max_range_days: 180          # on any query touching transactions
+  max_scan_rows: 5000000       # EXPLAIN estimate
+  max_return_rows: 10000       # a LIMIT is added if missing
+  sample_rows: 1000            # offered instead of a full dump
+  timeout_seconds: 10
+  max_sql_retries: 2
+
+blocked_functions:             # anything that reads files, the network or settings
+  [read_csv, read_csv_auto, read_parquet, read_json, read_json_auto, read_text, read_blob,
+   parquet_scan, glob, sniff_csv, httpfs, current_setting, duckdb_settings, getenv,
+   query_table, query, iceberg_scan, delta_scan, sqlite_scan, postgres_scan]

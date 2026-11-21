@@ -1,0 +1,84 @@
+{
+  "generated_at": "2026-11-21T01:49:37",
+  "seed": 20261101,
+  "start": "2026-08-01",
+  "end": "2026-10-31",
+  "as_of": "2026-10-31",
+  "rows": {
+    "transactions": 607139,
+    "transactions_unique": 604739,
+    "merchants": 400,
+    "banks": 12,
+    "payment_methods": 4,
+    "settlements": 34509,
+    "bank_downtime_events": 15
+  },
+  "planted": {
+    "P3_duplicate_rows": 2400,
+    "P4_null_bank_rows": 576,
+    "P4_gap_rows_removed": 2296,
+    "P5_dropped_payouts": [
+      {
+        "merchant_id": "M0332",
+        "settlement_date": "2026-10-21",
+        "gross_inr": 71512.34
+      },
+      {
+        "merchant_id": "M0266",
+        "settlement_date": "2026-10-30",
+        "gross_inr": 34507.06
+      },
+      {
+        "merchant_id": "M0266",
+        "settlement_date": "2026-10-19",
+        "gross_inr": 38490.01
+      },
+      {
+        "merchant_id": "M0078",
+        "settlement_date": "2026-10-25",
+        "gross_inr": 57767.82
+      },
+      {
+        "merchant_id": "M0398",
+        "settlement_date": "2026-10-23",
+        "gross_inr": 30722.72
+      },
+      {
+        "merchant_id": "M0007",
+        "settlement_date": "2026-10-28",
+        "gross_inr": 51520.72
+      },
+      {
+        "merchant_id": "M0362",
+        "settlement_date": "2026-10-10",
+        "gross_inr": 49102.43
+      },
+      {
+        "merchant_id": "M0164",
+        "settlement_date": "2026-10-23",
+        "gross_inr": 21465.95
+      },
+      {
+        "merchant_id": "M0308",
+        "settlement_date": "2026-10-10",
+        "gross_inr": 32208.17
+      },
+      {
+        "merchant_id": "M0202",
+        "settlement_date": "2026-10-24",
+        "gross_inr": 20863.95
+      },
+      {
+        "merchant_id": "M0021",
+        "settlement_date": "2026-10-10",
+        "gross_inr": 30034.94
+      },
+      {
+        "merchant_id": "M0077",
+        "settlement_date": "2026-10-05",
+        "gross_inr": 33057.35
+      }
+    ]
+  },
+  "data_version": "1d1049b6aac8"
+}
