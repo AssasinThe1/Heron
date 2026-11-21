@@ -31,8 +31,8 @@ def _load_dotenv():
 
 _load_dotenv()
 
-HERON_URL = os.environ.get("HERON_URL", "https://assasinthe1--qwen7b-t2s-serve.modal.run").rstrip("/")
-HERON_MODEL = os.environ.get("HERON_MODEL", "AssassinThe1/qwen7b-t2s-ddl-merged")
+HERON_URL = os.environ.get("HERON_URL", "https://assasinthe1--qwen7b-t2s-lora-serve.us-east.modal.run").rstrip("/")
+HERON_MODEL = os.environ.get("HERON_MODEL", "heron")
 HERON_TIMEOUT = float(os.environ.get("HERON_TIMEOUT", "150"))     # cold start is ~77 s
 # auto: try Heron, fall back to the semantic-layer compiler if it is unreachable.
 # off:  never call Heron (fully offline; every query comes from the compiler).

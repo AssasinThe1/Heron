@@ -320,20 +320,32 @@ class PayInsight:
                               window=window, source="semantic layer")
         cite = ev_c.id
         heron_note = None
+        heron_ok_label = False
         if sres.ok:
             match = results_match(sres.df, df, comp.unit)
+            label_only = False
+            if not match and it.order:
+                # BIRD-style answer to "which X ...": just the winning label, LIMIT 1. Accept it
+                # when that label is the semantic layer's top segment; numbers still come from
+                # the semantic-layer query, which is then cited alongside.
+                keycols = ([comp.bucket] if comp.bucket else []) + comp.dims
+                match = label_only = top_label_match(sres.df, df, keycols)
             ev_h = runner.log.add(
                 title=f"{label}: query written by {'Heron' if sres.provider == 'heron' else 'hosted model'}",
                 dataset=comp.table, filters=flabel, window=window, sql=sres.sql,
                 source=sres.provider, rows_scanned=sres.check.scanned, run_ms=sres.run_ms,
                 rows=len(sres.df), preview=sres.df.head(50),
                 note=("Cross-checked against the semantic-layer query "
-                      f"[{ev_c.id}]: {'results match' if match else 'RESULTS DIFFER'}."
+                      f"[{ev_c.id}]: {'same top segment (values from the semantic layer)' if label_only else 'results match' if match else 'RESULTS DIFFER'}."
                       + (f" Repaired identifiers: {sres.attempts[-1].repaired}." if sres.attempts
                          and sres.attempts[-1].repaired else "")
                       + (f" Attempts: {len(sres.attempts)}." if len(sres.attempts) > 1 else "")))
             ev_h.alt_sql = [a.sql or a.raw for a in sres.attempts[:-1] if a.sql or a.raw]
-            if match:
+            if label_only:
+                heron_ok_label = True
+                ev_c.note = (f"Independent check of [{ev_h.id}] from semantic_layer.yaml: same top "
+                             "segment. Heron returned only the label, so values are cited from here.")
+            elif match:
                 cite = ev_h.id
                 ev_c.note = f"Independent check of [{ev_h.id}] from semantic_layer.yaml: results match."
             else:
@@ -348,8 +360,11 @@ class PayInsight:
             ev_c.note = (f"Heron {reason}; SQL compiled from semantic_layer.yaml."
                          + (f" Heron attempts: {len(sres.attempts)}." if sres.attempts else ""))
         ans = Answer(fmt=F)
-        ans.meta["sql_source"] = sres.provider if (sres.ok and cite != ev_c.id) else "semantic layer"
-        ans.meta["heron_ok"] = bool(sres.ok and cite != ev_c.id)
+        label_ok = bool(sres.ok and heron_ok_label)
+        ans.meta["sql_source"] = (sres.provider if (sres.ok and cite != ev_c.id)
+                                  else f"{sres.provider} label + semantic layer" if label_ok
+                                  else "semantic layer")
+        ans.meta["heron_ok"] = bool(sres.ok and cite != ev_c.id) or label_ok
         ans.meta["heron_attempted"] = bool(sres.attempts)
         ans.meta["heron_value"] = _primary_value(sres.df) if sres.ok else None
         self._metric_text(it, comp, df, cite, ans, F)
@@ -839,6 +854,27 @@ def results_match(hdf, cdf, unit):
             if np.all(np.abs(v - target) <= tol):
                 return True
     return False
+
+
+def top_label_match(hdf, cdf, keycols):
+    """Is Heron's first row the semantic layer's top segment (cdf is already ranked)?"""
+    if hdf is None or cdf is None or hdf.empty or cdf.empty or not keycols or len(hdf) > 5:
+        return False
+    want = [cdf.iloc[0][k] for k in keycols]
+    got = list(hdf.iloc[0].values)
+
+    def same(a, b):
+        if pd.isna(a) or pd.isna(b):
+            return False
+        if str(a).strip().lower() == str(b).strip().lower():
+            return True
+        try:                                   # timestamps, dates, hour numbers
+            ta, tb = pd.Timestamp(a), pd.Timestamp(b)
+            return ta == tb
+        except (ValueError, TypeError):
+            return False
+
+    return all(any(same(w, g) for g in got) for w in want)
 
 
 def _primary_value(df):

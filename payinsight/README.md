@@ -17,7 +17,7 @@ cd payinsight
 pip install -r requirements.txt
 python data/generate.py          # ~10 s: 607k payment attempts, 6 tables, 5 planted problems
 streamlit run app.py             # the app
-python -m pytest -q              # 75 tests, no network needed
+python -m pytest -q              # 80 tests, no network needed
 python -m eval.run --heron off   # 30 known-answer questions, offline (~5 s)
 python -m eval.run               # same, with Heron live on Modal (~3 min + cold start)
 ```
@@ -26,8 +26,8 @@ Nothing needs a key. Without one, the rules planner handles understanding, and i
 unreachable the semantic-layer compiler writes the SQL. Optional settings are in `.env.example`
 (Groq/Gemini keys for the hosted planner, `HERON_MODE=off` for fully offline).
 
-**Before a demo:** press *Wake Heron* in the sidebar. A cold start took **163 s** when measured on
-21 Nov 2026 (Heron's README says ~77 s). The endpoint scales to zero after 5 idle minutes.
+**Before a demo:** press *Wake Heron* in the sidebar. A cold start of the LoRA endpoint took **128 s** when
+measured on 21 Nov 2026 (the old merged endpoint took 163 s; Heron's README says ~77 s). The endpoint scales to zero after 5 idle minutes.
 
 ## Results (real scores, including failures)
 
@@ -38,22 +38,24 @@ unreachable the semantic-layer compiler writes the SQL. Optional settings are in
 | Root cause (names P1 mix shift + P2 Coral Bank) | 4/4 | 4/4 | 4/4 |
 | Ambiguous (asks, or states the assumption) | 3/3 | 3/3 | — |
 | Must refuse (a miss is a blocker) | 5/5 | 5/5 | 5/5 |
-| **Heron's own SQL** matched the independent check | **11/18** | — | — |
+| **Heron's own SQL** matched the independent check | **14/18** | — | — |
 
 Full per-question tables: [eval/results_heron_live.md](eval/results_heron_live.md),
 [eval/results_heron_off.md](eval/results_heron_off.md).
 
 **Heron is scored as its own row.** The system's number can come from the semantic-layer
-cross-check (below), so a system pass never stands in for "Heron was right". The misses we
-inspected were wrong-but-safe SQL: ranking banks or days by success *count* instead of rate, and
-forgetting to exclude cancelled attempts. In each of the 7 misses the cross-check caught the
-mismatch, and the answer used the definition-built query and said so in the caveats.
+cross-check (below), so a system pass never stands in for "Heron was right". All 4 misses are the
+same wrong-but-safe error: asked for the best or worst *success rate* by bank, method, category or
+device, Heron ranks by a *count* of payments, even after the checks send that reason back to it.
+In each case the cross-check caught the mismatch, and the answer used the definition-built query
+and said so in the caveats. For "which X" questions Heron answers BIRD-style, with only the
+winning label; that counts as a match when the label is the definition-built query's top segment,
+and the numbers are then cited from the definition-built query.
 
-Latency: root-cause answers take under 1 s (27 template queries on DuckDB; 0.85–0.99 s in the live
-run). Simple and segment questions with Heron live had a **median of 11.3 s** (5.9 s for the 11
-where Heron's SQL was used). The extra time is a deliberate safety trade-off: a query that fails
+Latency: root-cause answers take under 1 s (27 template queries on DuckDB). Simple and segment
+questions with Heron live had a **median of 7.1 s**. Most of that is Heron itself; a query that fails
 the checks goes back to Heron with the reason, up to twice, before the definition-built query is
-used. Offline answers take under 0.2 s.
+used. That retry is a deliberate safety trade-off. Offline answers take under 0.2 s.
 
 ## What the demo shows
 
@@ -116,32 +118,39 @@ eval/questions.yaml         30 questions with hand-written gold SQL; eval/run.py
 tests/                      guardrails, maths, planner, planted data, end-to-end, role isolation
 ```
 
-## Known issues
+## Heron serving: what was wrong and how it was fixed
 
-**The deployed Heron endpoint does not reproduce Heron's offline outputs.** On Heron's own BIRD
-dev prompts, the Modal endpoint often emits a single `))` token where the offline evaluation
-emitted `)` (for example `SELECT COUNT(T1.CDSCode)) FROM …`). In a 20-prompt sample, 3 outputs
-were identical to `results_dev_7b_tuned.json` and 6 had unbalanced brackets; the offline file has
-1 unbalanced query in 1,534. **Heron's 56.4% BIRD figure should not be assumed for the live
-endpoint until this is fixed.** What has been checked (21 Nov 2026):
+The original endpoint (`deploy_modal.py`, merged model `AssassinThe1/qwen7b-t2s-ddl-merged`) did
+not reproduce Heron's offline outputs: about a third of its queries had a stray `))`. Offline vLLM
+runs on 300 BIRD dev prompts, greedy (21 Nov 2026), located the cause:
 
-| Candidate cause | Finding |
-|---|---|
-| Chat template | Same as the base model (`chat_template.jinja`, 2,507 chars). Not the cause. |
-| Repetition penalty | **Real but minor.** `vllm serve` applied the merged repo's `generation_config.json` (`repetition_penalty 1.1`) to API requests; the offline run used plain greedy decoding. Sending `repetition_penalty: 1.0` raised identical outputs only from 3/20 to 5/20. PayInsight now sends it (`engine/llm.py`). |
-| Precision | **Unresolved, most likely.** Training was bf16; `merge_and_push.py` saved fp16, as did the offline run. But the uploaded `config.json` was written by transformers 5.15 as `"dtype": "float16"`, while the Modal image pins transformers 4.53.3, which reads `torch_dtype`. vLLM may therefore not see the intended dtype and pick its own default. `deploy_modal.py` passes no `--dtype`. |
+| Setup (vLLM 0.9.2, offline `LLM.chat`) | Identical to offline results | Unbalanced brackets |
+|---|---|---|
+| A100, uploaded merged model, fp16 | 94/300 | 97/300 |
+| L4, uploaded merged model, fp16 | 94/300 | 98/300 |
+| L4, uploaded merged model, dtype `auto` (resolved to fp16) | 94/300 | 98/300 |
+| L4, base Qwen2.5-Coder-7B-Instruct + LoRA adapter `AssassinThe1/qwen7b-t2s-ddl`, fp16 | **297/300** | **1/300** |
+| (offline `results_dev_7b_tuned.json`) | — | 1/300 |
 
-Suggested fix, to be run by the endpoint's owner: redeploy with `--dtype float16` (matches the
-offline run exactly), rerun a sample of `prompts_dev_ddl.json` and diff against
-`results_dev_7b_tuned.json`; if it still differs, try `--dtype bfloat16` and compare the GPU type
-and vLLM flags (`--enforce-eager`) with the offline Colab run.
+GPU type and dtype make no difference; the adapter is fine; **the uploaded merged weights are not
+the evaluated model.** `merge_and_push.py` looks correct, but the upload was saved by
+transformers 5.15, not the 4.x stack the offline merge used. Also ruled out: the chat template
+(identical to the base model's). A smaller difference was real: `vllm serve` applied the merged
+repo's `generation_config.json` (`repetition_penalty 1.1`), which the offline run never used, so
+PayInsight now pins plain greedy decoding (`engine/llm.py`).
 
-PayInsight works around it with `balance_parens` in `engine/sqlgen.py`. It only removes surplus
-`)` at `))` sites, accepts a result only if the SQL parses, and is recorded in each query's
-evidence note. Stating the resolved dates explicitly in Heron's question raised Heron's acceptance
-from 2/18 to 4/18; semantic lint raised it to 10/18 by rewriting `BETWEEN 'day' AND 'day'` on
-timestamps into a half-open range, and by sending missing-cancel-exclusion and rank-by-count errors
-back to Heron as retry feedback; pinning greedy decoding without the penalty gave 11/18.
+**Fix in use:** `deploy_modal_lora.py` (in the Heron root) serves the base model with the adapter
+as model `heron`, as a separate Modal app (`qwen7b-t2s-lora`); the original endpoint is untouched.
+On 100 dev prompts it matched the offline outputs 99/100 with 0 unbalanced brackets, and Heron's
+score in PayInsight went from 11/18 to 14/18 (the label-only match above accounts for 3 of those).
+The merged upload should still be re-made in a transformers 4.53 environment and re-checked
+before anyone else serves it.
+
+The earlier workarounds stay as safety nets: `balance_parens` in `engine/sqlgen.py` removes surplus
+`)` only at `))` sites and keeps the result only if it parses (not triggered in the latest run);
+resolved dates are stated explicitly in Heron's question; and semantic lint rewrites
+`BETWEEN 'day' AND 'day'` on timestamps and sends missing-cancel-exclusion and rank-by-count
+errors back to Heron as retry feedback.
 
 ## Assumptions, mocks and limitations
 
