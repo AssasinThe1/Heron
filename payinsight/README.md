@@ -117,7 +117,7 @@ data/generate.py            seeded generator (settings in data/generator_config.
 config/semantic_layer.yaml  business definitions, synonyms, analysis settings
 config/policy.yaml          roles, row filters, PII handling, limits, blocked functions
 engine/                     planner · sqlgen · guardrails · compiler · analysis · dq · reconcile · answer · pipeline
-app.py                      Streamlit: Ask · Data & rules · Audit log · Evaluation
+app.py                      Streamlit: Weekly report · Ask · Data & rules · Audit log · Evaluation
 eval/questions.yaml         30 questions with hand-written gold SQL; eval/run.py scores them
 tests/                      guardrails, maths, planner, planted data, end-to-end, role isolation
 ```

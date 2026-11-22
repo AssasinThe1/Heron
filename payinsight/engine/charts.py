@@ -9,6 +9,7 @@ never by colour alone. One y-axis per chart; transparent backgrounds so the
 Streamlit light/dark theme shows through.
 """
 
+import pandas as pd
 import plotly.graph_objects as go
 
 BLUE, ORANGE, AQUA, YELLOW, MAGENTA = "#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4"
@@ -113,6 +114,37 @@ def hourly(df, title, r0=None, events=None):
                       annotation_font_size=10, annotation_font_color=MUTED)
     fig.update_layout(showlegend=False)
     return _layout(fig, title, "Success rate", percent=True)
+
+
+def weekly_trend(df, i, cmp):
+    """Weekly success rate, the selected week marked, its 4-week baseline as a dotted segment."""
+    fig = go.Figure()
+    half = pd.Timedelta(days=3.5)            # points sit on each week's Monday; shade whole weeks
+    if cmp is not None:
+        first_base = df.week.iloc[i - 4]
+        fig.add_vrect(x0=first_base - half, x1=df.week.iloc[i] - half, fillcolor=GRID,
+                      line_width=0, annotation_text="4 weeks before", annotation_position="top left",
+                      annotation_font_size=10, annotation_font_color=MUTED)
+        fig.add_shape(type="line", x0=first_base, x1=df.week.iloc[i],
+                      y0=cmp["base_rate"], y1=cmp["base_rate"],
+                      line=dict(color=ORANGE, width=1.5, dash="dot"))
+        fig.add_annotation(x=first_base, y=cmp["base_rate"], text=f"average {cmp['base_rate']:.1f}%",
+                           showarrow=False, yshift=-10, xanchor="left",
+                           font=dict(size=10, color=MUTED))
+    fig.add_scatter(x=df.week, y=df.rate, mode="lines+markers", name="Success rate",
+                    line=dict(color=BLUE, width=2), marker=dict(size=8, color=BLUE),
+                    customdata=list(zip(df.week_end.dt.strftime("%d %b"), df.attempts)),
+                    hovertemplate="Week %{x|%d %b} – %{customdata[0]}<br>%{y:.1f}% of "
+                                  "%{customdata[1]:,} attempts<extra></extra>")
+    fig.add_scatter(x=[df.week.iloc[i]], y=[df.rate.iloc[i]], mode="markers+text",
+                    marker=dict(size=13, color=BLUE, line=dict(color="white", width=2)),
+                    text=[f"{df.rate.iloc[i]:.1f}%"], textposition="bottom center",
+                    hoverinfo="skip")
+    fig.update_layout(showlegend=False)
+    fig = _layout(fig, "Success rate by week (Mon–Sun, IST)", "Success rate", percent=True)
+    lo, hi = df.rate.min(), df.rate.max()
+    fig.update_yaxes(range=[lo - 0.35 * (hi - lo), hi + 0.15 * (hi - lo)])
+    return fig
 
 
 def metric_chart(df, dims, bucket, unit, title):
