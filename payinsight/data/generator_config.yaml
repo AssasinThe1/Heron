@@ -1,0 +1,98 @@
+# Every knob the data generator uses. Retune here and regenerate in ~20 s:
+#   python data/generate.py
+# These are TARGETS for planted effects, not findings. The eval suite and the
+# hand-written checks in tests/test_planted.py measure what actually landed.
+
+seed: 20261101
+start: "2026-08-01"          # inclusive, IST
+end: "2026-10-31"            # inclusive, IST
+as_of: "2026-10-31"          # data is complete through the end of this day; "today" for the app
+
+base_orders_per_day: 5600    # non-PlayArena orders; retries add ~12% attempts
+weekend_factor: 0.92
+daily_noise_sd: 0.04
+growth_per_month: 0.03       # mild organic growth
+
+retry_prob: 0.40             # a failed attempt is retried with this probability
+max_attempts: 3
+
+methods:                     # share of orders, base success rate (of non-cancelled)
+  upi:        {share: 0.55, rate: 0.860, cancel: 0.035, display: "UPI"}
+  card:       {share: 0.25, rate: 0.660, cancel: 0.040, display: "Card"}
+  netbanking: {share: 0.10, rate: 0.760, cancel: 0.080, display: "Net banking"}
+  wallet:     {share: 0.10, rate: 0.900, cancel: 0.030, display: "Wallet"}
+
+regions: {North: 0.30, South: 0.25, East: 0.15, West: 0.30}
+devices: {android: 0.58, ios: 0.17, web: 0.15, mobile_web: 0.10}
+
+banks:                       # share of attempts, multiplicative success factor
+  - {id: B01, name: Coral Bank,           type: private,       share: 0.22, factor: 1.025}
+  - {id: B02, name: Harbor Bank,          type: public,        share: 0.14, factor: 0.990}
+  - {id: B03, name: Summit Bank,          type: private,       share: 0.12, factor: 1.010}
+  - {id: B04, name: Meridian Bank,        type: public,        share: 0.10, factor: 0.975}
+  - {id: B05, name: Lotus Bank,           type: private,       share: 0.09, factor: 1.000}
+  - {id: B06, name: Granite Bank,         type: public,        share: 0.07, factor: 0.960}
+  - {id: B07, name: Peacock Bank,         type: private,       share: 0.06, factor: 1.015}
+  - {id: B08, name: Indigo Bank,          type: small_finance, share: 0.05, factor: 0.940}
+  - {id: B09, name: Saffron Bank,         type: public,        share: 0.05, factor: 0.985}
+  - {id: B10, name: Monsoon Bank,         type: cooperative,   share: 0.04, factor: 0.930}
+  - {id: B11, name: Banyan Bank,          type: small_finance, share: 0.03, factor: 0.950}
+  - {id: B12, name: Teak Cooperative Bank, type: cooperative,  share: 0.03, factor: 0.920}
+
+n_merchants: 400
+categories:                  # share of merchants, median ticket (INR), success tweak
+  ecommerce:     {share: 0.22, ticket: 1400, tweak: 1.000}
+  food_delivery: {share: 0.14, ticket: 450,  tweak: 1.010}
+  grocery:       {share: 0.12, ticket: 900,  tweak: 1.010}
+  travel:        {share: 0.08, ticket: 5200, tweak: 0.970}
+  utilities:     {share: 0.10, ticket: 1100, tweak: 1.015}
+  education:     {share: 0.07, ticket: 3500, tweak: 0.990}
+  fashion:       {share: 0.10, ticket: 1800, tweak: 0.995}
+  electronics:   {share: 0.07, ticket: 7800, tweak: 0.975}
+  gaming:        {share: 0.10, ticket: 300,  tweak: 0.990}
+
+# ---- planted scenarios ------------------------------------------------------
+p1_playarena:                # mix shift
+  merchant_id: M0400
+  name: PlayArena
+  category: gaming
+  region: West
+  onboarded_at: "2026-10-01"
+  ramp_start: "2026-10-01"
+  ramp_days: 10              # linear ramp to the plateau share
+  plateau_share: 0.18        # share of ALL attempts at plateau
+  method_mix: {card: 0.90, upi: 0.10}
+  card_rate: 0.650
+  upi_rate: 0.850
+  ticket: 250
+
+p2_coral_outage:             # driver finding
+  bank_id: B01
+  method: upi
+  windows:                   # logged in bank_downtime_events
+    - ["2026-10-14 18:00", "2026-10-14 22:00"]
+    - ["2026-10-15 18:00", "2026-10-15 22:00"]
+  outage_rate: 0.12          # success rate inside the logged windows
+  degraded:                  # NOT logged: the "evidence against" a clean story
+    - ["2026-10-14 17:00", "2026-10-14 18:00"]
+    - ["2026-10-15 22:00", "2026-10-15 23:00"]
+  degraded_rate: 0.45
+
+p3_duplicates:
+  date: "2026-10-09"
+  n_rows: 2400
+  failed_weight: 3.0         # the retry bug double-logs failed attempts more often
+
+p4_missing:
+  null_bank_dates: ["2026-09-20", "2026-09-22"]   # inclusive range
+  null_bank_share: 0.03
+  gap_start: "2026-08-17 10:00"
+  gap_end: "2026-08-17 16:00"
+
+p5_settlements:
+  refund_rate: [0.013, 0.021]          # uniform per merchant-day
+  fee_rate: {enterprise: 0.016, mid: 0.019, small: 0.022}
+  payout_lag_days: 1                   # UTC trading day D settles on D+1
+  dropped_october_payouts: 12          # merchant-days with no payout record: the "unexplained" bit
+
+background_outages: 13       # small logged outages on other banks (15 events total)

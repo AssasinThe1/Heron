@@ -1,0 +1,97 @@
+# The semantic layer: what each business word means in the data.
+# Read by the planner (to resolve words), the SQL writer (as "external
+# knowledge" in Heron's prompt) and the query compiler (to build exact SQL).
+# Editable by non-engineers; nothing here is code.
+
+metrics:
+  success_rate:
+    description: Share of payment attempts that succeeded
+    unit: percent
+    table: transactions
+    numerator: COUNT(DISTINCT txn_id) FILTER (WHERE status = 'success')
+    denominator: COUNT(DISTINCT txn_id)
+    default_excludes: [user_cancelled]
+    alternatives:
+      order_success_rate: share of unique orders with at least one success
+    synonyms: [success rate, sr, approval rate, conversion, conversion rate, success ratio, approval]
+
+  order_success_rate:
+    description: Share of unique orders with at least one successful attempt
+    unit: percent
+    table: transactions
+    numerator: COUNT(DISTINCT order_id) FILTER (WHERE status = 'success')
+    denominator: COUNT(DISTINCT order_id)
+    default_excludes: [user_cancelled]
+    synonyms: [order success rate, unique order success, order conversion]
+
+  attempts:
+    description: Number of payment attempts (cancelled attempts included)
+    unit: count
+    table: transactions
+    expression: COUNT(DISTINCT txn_id)
+    synonyms: [attempts, transactions, volume, txn count, number of transactions, payment attempts]
+
+  failures:
+    description: Number of failed payment attempts
+    unit: count
+    table: transactions
+    expression: COUNT(DISTINCT txn_id) FILTER (WHERE status = 'failed')
+    synonyms: [failures, failed transactions, failed payments, declines, failed attempts]
+
+  successful_value:
+    description: Total INR value of successful payment attempts
+    unit: inr
+    table: transactions
+    expression: SUM(amount_inr) FILTER (WHERE status = 'success')
+    synonyms: [successful payment value, payment value, revenue, gmv, tpv, sales, value processed, collected]
+
+  avg_ticket:
+    description: Average INR value of a successful payment
+    unit: inr
+    table: transactions
+    expression: AVG(amount_inr) FILTER (WHERE status = 'success')
+    synonyms: [average ticket, average order value, aov, average amount, ticket size]
+
+  settled_net:
+    description: Net INR paid out to merchants (after refunds and fees), by settlement date
+    unit: inr
+    table: settlements
+    expression: SUM(net_inr)
+    date_column: settlement_date
+    synonyms: [settlements, settled amount, net settlement, payouts]
+
+dimensions:
+  method:   {column: transactions.method, label: Payment method, values: [card, upi, netbanking, wallet]}
+  bank:     {column: banks.name, label: Issuer bank, join: transactions.bank_id = banks.bank_id}
+  merchant: {column: merchants.name, label: Merchant, join: transactions.merchant_id = merchants.merchant_id}
+  category: {column: merchants.category, label: Merchant category, join: transactions.merchant_id = merchants.merchant_id}
+  tier:     {column: merchants.tier, label: Merchant tier, join: transactions.merchant_id = merchants.merchant_id}
+  region:   {column: transactions.region, label: Region, values: [North, South, East, West]}
+  device:   {column: transactions.device, label: Device, values: [android, ios, web, mobile_web]}
+  failure_code: {column: transactions.failure_code, label: Failure code}
+  bank_type: {column: banks.bank_type, label: Bank type, join: transactions.bank_id = banks.bank_id}
+
+# Dimensions the "why did it change" engine sweeps, in drill-down preference order.
+analysis:
+  primary_mix_dimension: method
+  sweep: [method, bank, category, merchant, region, device]
+  min_segment_attempts: 500
+  max_drill_levels: 3
+  baseline_weeks: 4
+
+time:
+  column: transactions.created_at
+  default_grain: day
+  timezone: Asia/Kolkata
+  week_starts: monday
+  max_range_days: 180
+
+# Free-text facts the SQL writer needs that a schema can't say.
+knowledge:
+  - "Success rate = COUNT(DISTINCT txn_id) with status = 'success' divided by COUNT(DISTINCT txn_id), excluding rows with status = 'user_cancelled'. Report it as a percentage."
+  - "status is one of 'success', 'failed', 'user_cancelled'."
+  - "method is one of 'card', 'upi', 'netbanking', 'wallet' (lower case)."
+  - "region is one of 'North', 'South', 'East', 'West'."
+  - "created_at is an IST timestamp 'YYYY-MM-DD HH:MM:SS'. Filter a date range with created_at >= 'start' AND created_at < 'day after end'."
+  - "Bank names live in banks.name (join on bank_id); merchant names and categories live in merchants (join on merchant_id)."
+  - "Weeks start on Monday."

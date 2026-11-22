@@ -1,0 +1,7 @@
+data/*.duckdb
+data/*.duckdb.wal
+eval/eval_audit.duckdb*
+.env
+__pycache__/
+.pytest_cache/
+data/*.parquet
