@@ -14,7 +14,7 @@ import yaml
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from engine import audit, llm, settings  # noqa: E402
+from engine import audit, charts, llm, report, settings  # noqa: E402
 from engine.evidence import CACHE  # noqa: E402
 from engine.pipeline import PayInsight, Session  # noqa: E402
 
@@ -61,8 +61,8 @@ ss = state()
 with st.sidebar:
     st.title("💳 PayInsight")
     st.caption("AI business analyst for payments · data through 31 Oct 2026 (IST)")
-    page = st.radio("Page", ["Ask", "Data & rules", "Audit log", "Evaluation"],
-                    label_visibility="collapsed")
+    page = st.radio("Page", ["Weekly report", "Ask", "Data & rules", "Audit log", "Evaluation"],
+                    label_visibility="collapsed", key="page")
     role = st.selectbox("Signed in as", list(ROLES), format_func=ROLES.get,
                         help="Simulated login. A real deployment takes the role from single sign-on.")
     ss["sessions"].setdefault(role, Session())
@@ -80,7 +80,9 @@ with st.sidebar:
     if settings.HERON_MODE != "off" and st.button("Wake Heron (≈1–3 min cold start)"):
         with st.spinner("Waking Heron on Modal…"):
             text, info = llm.heron_wake(timeout=300)
-        st.toast("Heron is awake" if text else f"Heron did not answer: {info.get('error')}")
+        if text:
+            st.rerun()                     # redraw the status line above, now "on Modal"
+        st.toast(f"Heron did not answer: {info.get('error')}")
     st.markdown("**Understanding** · " + ("hosted model (Groq/Gemini)" if llm.hosted_available()
                                           and settings.PLANNER_MODE != "rules" else "rules planner"))
     st.caption(f"Cache: {CACHE.hits} hits / {CACHE.misses} misses")
@@ -228,8 +230,49 @@ def ask(question, patch=None):
     ss["turns"][role].append((shown, ans))
 
 
+def ask_from_report(question):
+    """Button callback: jump to the Ask page with the question queued."""
+    st.session_state["page"] = "Ask"
+    st.session_state["queued"] = (question, None)
+
+
 # ----------------------------------------------------------------- pages
-if page == "Ask":
+if page == "Weekly report":
+    bot = bot_for(role)
+    df, ev = report.weekly(bot.rdb)
+    if df is None:
+        st.info("This role has no access to payment attempts, so there is no weekly report.")
+    else:
+        weeks = [f"{w:%d %b} – {e:%d %b %Y}" for w, e in zip(df.week, df.week_end)]
+        default = report.largest_drop(df)
+        default = len(df) - 1 if default is None else default
+        head, pick = st.columns([3, 2])
+        head.subheader(f"Weekly payments report · {ROLES[role]}")
+        i = pick.selectbox("Week", range(len(df)), index=default, format_func=weeks.__getitem__,
+                           label_visibility="collapsed")
+        cmp = report.compare(df, i)
+        if cmp is None:
+            st.caption("Not enough earlier weeks for a 4-week comparison.")
+        else:
+            st.caption(f"Compared with the 4 weeks before ({cmp['base_start']:%d %b} – "
+                       f"{cmp['base_end']:%d %b}). Success rate excludes customer-cancelled attempts.")
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Success rate", f"{cmp['rate']:.1f}%", f"{cmp['pp']:+.1f} pp")
+            c2.metric("Payment attempts", f"{cmp['attempts']:,.0f}", f"{cmp['attempts_pct']:+.1f}%",
+                      delta_color="off")
+            c3.metric("Successful value", f"₹{cmp['value'] / 1e7:.2f} crore", f"{cmp['value_pct']:+.1f}%")
+            c4.metric("Failed payments", f"{cmp['failures']:,.0f}", f"{cmp['failures_pct']:+.1f}%",
+                      delta_color="inverse")
+        st.plotly_chart(charts.weekly_trend(df, i, cmp), width="stretch", key="weekly-trend")
+        if cmp is not None and cmp["pp"] < 0:
+            d = df.week.iloc[i]
+            q = f"Why did our success rate drop in the week of {d.day} {d:%B}?"
+            st.button(f"Ask PayInsight: “{q}”", type="primary", on_click=ask_from_report, args=(q,))
+        with st.expander("How this report is computed"):
+            st.code(ev.sql, language="sql")
+            st.caption(f"Passed the query checks · {ev.run_ms:.0f} ms")
+
+elif page == "Ask":
     st.subheader(f"Ask PayInsight · {ROLES[role]}")
     if not ss["turns"][role]:
         st.markdown("Ask about success rates, volumes, payment value, banks, merchants or settlements. "
